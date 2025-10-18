@@ -4,16 +4,6 @@ let currentFilter = localStorage.getItem('currentFilter') || 'all';
 let lastSyncTime = localStorage.getItem('lastSyncTime') || null;
 let conflictResolutionEnabled = true;
 
-// Simulated server quotes - Task 3
-const serverQuotes = [
-    { text: "The only way to do great work is to love what you do.", category: "Inspiration" },
-    { text: "Innovation distinguishes between a leader and a follower.", category: "Leadership" },
-    { text: "Life is what happens to you while you're busy making other plans.", category: "Life" },
-    { text: "The future belongs to those who believe in the beauty of their dreams.", category: "Dreams" },
-    { text: "Server-side quote: Always code as if the guy who ends up maintaining your code will be a violent psychopath who knows where you live.", category: "Programming" },
-    { text: "Simplicity is the ultimate sophistication.", category: "Design" }
-];
-
 // Task 1: Load quotes from local storage
 function loadQuotesFromStorage() {
     const storedQuotes = localStorage.getItem('quotes');
@@ -142,8 +132,10 @@ function addQuote() {
         showNotification('Quote added successfully!', 'success');
         showSpecificQuote(newQuote);
         
-        // Task 3: Simulate syncing with server after adding quote
-        setTimeout(syncQuotes, 1000);
+        // Task 3: Simulate posting to server after adding quote
+        setTimeout(() => {
+            postQuoteToServer(newQuote);
+        }, 1000);
     } else {
         showNotification('Please enter both quote text and category.', 'error');
     }
@@ -212,52 +204,112 @@ function importFromJsonFile(event) {
     event.target.value = '';
 }
 
-// ========== TASK 3 SPECIFIC FUNCTIONS (RENAMED FOR CHECKER) ==========
+// ========== TASK 3 SPECIFIC FUNCTIONS ==========
 
-// Task 3: Fetch quotes from server (required by checker)
-function fetchQuotesFromServer() {
-    return new Promise((resolve) => {
-        // Simulate API call delay
-        setTimeout(() => {
-            resolve([...serverQuotes]);
-        }, 1000);
-    });
+// Task 3: Fetch quotes from server using JSONPlaceholder API
+async function fetchQuotesFromServer() {
+    try {
+        showNotification('Fetching quotes from server...', 'info');
+        
+        const response = await fetch('https://jsonplaceholder.typicode.com/posts');
+        
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
+        
+        const posts = await response.json();
+        
+        // Convert posts to our quote format
+        const serverQuotes = posts.slice(0, 5).map((post, index) => ({
+            text: post.title,
+            category: `Server-${index + 1}`
+        }));
+        
+        // Add some predefined server quotes for variety
+        serverQuotes.push(
+            { text: "The only way to do great work is to love what you do.", category: "Inspiration" },
+            { text: "Innovation distinguishes between a leader and a follower.", category: "Leadership" },
+            { text: "Life is what happens to you while you're busy making other plans.", category: "Life" }
+        );
+        
+        showNotification('Successfully fetched quotes from server!', 'success');
+        return serverQuotes;
+        
+    } catch (error) {
+        showNotification('Error fetching from server: ' + error.message, 'error');
+        // Return fallback quotes if server is unavailable
+        return [
+            { text: "The only way to do great work is to love what you do.", category: "Inspiration" },
+            { text: "Innovation distinguishes between a leader and a follower.", category: "Leadership" },
+            { text: "Life is what happens to you while you're busy making other plans.", category: "Life" }
+        ];
+    }
 }
 
-// Task 3: Sync quotes function (required by checker)
+// Task 3: Post quote to server using JSONPlaceholder API
+async function postQuoteToServer(quote) {
+    try {
+        const response = await fetch('https://jsonplaceholder.typicode.com/posts', {
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+            },
+            body: JSON.stringify({
+                title: quote.text,
+                body: `Category: ${quote.category}`,
+                userId: 1
+            })
+        });
+        
+        if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+        }
+        
+        const result = await response.json();
+        console.log('Quote posted to server:', result);
+        showNotification('Quote synced with server!', 'success');
+        
+    } catch (error) {
+        console.log('Error posting to server (expected for mock API):', error.message);
+        showNotification('Note: Server is mock - data not actually saved', 'info');
+    }
+}
+
+// Task 3: Sync quotes function
 async function syncQuotes() {
-    showNotification('Syncing with server...', 'info');
+    showNotification('Starting sync with server...', 'info');
     
     try {
-        // Fetch data from server using mock API
+        // Fetch data from server using JSONPlaceholder API
         const serverQuotesData = await fetchQuotesFromServer();
         
+        // Find and handle conflicts
         const conflicts = findConflicts(quotes, serverQuotesData);
         
         if (conflicts.length > 0) {
             showNotification(`Found ${conflicts.length} conflicts during sync`, 'warning');
             resolveConflicts(conflicts);
-        } else {
-            // Merge server quotes with local quotes
-            const mergedQuotes = mergeQuotes(quotes, serverQuotesData);
-            const newQuotesCount = mergedQuotes.length - quotes.length;
-            quotes = mergedQuotes;
-            saveQuotes();
-            
-            if (newQuotesCount > 0) {
-                showNotification(`Sync completed! Added ${newQuotesCount} new quotes from server.`, 'success');
-            } else {
-                showNotification('Sync completed! Data is up to date.', 'success');
-            }
-            showRandomQuote();
         }
         
+        // Merge server quotes with local quotes
+        const mergedQuotes = mergeQuotes(quotes, serverQuotesData);
+        const newQuotesCount = mergedQuotes.length - quotes.length;
+        
+        if (newQuotesCount > 0) {
+            quotes = mergedQuotes;
+            saveQuotes();
+            showNotification(`Sync completed! Added ${newQuotesCount} new quotes from server.`, 'success');
+        } else {
+            showNotification('Sync completed! Data is up to date.', 'success');
+        }
+        
+        showRandomQuote();
         lastSyncTime = new Date().toISOString();
         localStorage.setItem('lastSyncTime', lastSyncTime);
         updateSyncStatus();
         
     } catch (error) {
-        showNotification('Error syncing with server: ' + error.message, 'error');
+        showNotification('Error during sync: ' + error.message, 'error');
     }
 }
 
@@ -301,9 +353,10 @@ function resolveConflicts(conflicts) {
         }
     });
     
-    saveQuotes();
-    showNotification(`Automatically resolved ${resolvedCount} conflicts.`, 'success');
-    showRandomQuote();
+    if (resolvedCount > 0) {
+        saveQuotes();
+        showNotification(`Automatically resolved ${resolvedCount} conflicts.`, 'success');
+    }
 }
 
 // Task 3: Merge quotes from local and server
@@ -332,26 +385,35 @@ function mergeQuotes(localQuotes, serverQuotes) {
 
 // Task 3: Manual conflict resolution
 function manualConflictResolution() {
-    const conflicts = findConflicts(quotes, serverQuotes);
+    showNotification('Checking for conflicts...', 'info');
     
-    if (conflicts.length === 0) {
-        showNotification('No conflicts found!', 'success');
-        return;
-    }
-    
-    let resolutionText = `Found ${conflicts.length} conflict(s):\n\n`;
-    conflicts.forEach((conflict, index) => {
-        resolutionText += `${index + 1}. "${conflict.local.text}"\n`;
-        resolutionText += `   Local: ${conflict.local.category}\n`;
-        resolutionText += `   Server: ${conflict.server.category}\n\n`;
-    });
-    
-    resolutionText += "Server version will be used for resolution.";
-    
-    if (confirm(resolutionText + "\n\nProceed with automatic resolution?")) {
-        resolveConflicts(conflicts);
-        showNotification('Manual conflict resolution completed!', 'success');
-    }
+    setTimeout(async () => {
+        try {
+            const serverQuotesData = await fetchQuotesFromServer();
+            const conflicts = findConflicts(quotes, serverQuotesData);
+            
+            if (conflicts.length === 0) {
+                showNotification('No conflicts found!', 'success');
+                return;
+            }
+            
+            let resolutionText = `Found ${conflicts.length} conflict(s):\n\n`;
+            conflicts.forEach((conflict, index) => {
+                resolutionText += `${index + 1}. "${conflict.local.text}"\n`;
+                resolutionText += `   Local: ${conflict.local.category}\n`;
+                resolutionText += `   Server: ${conflict.server.category}\n\n`;
+            });
+            
+            resolutionText += "Server version will be used for resolution.";
+            
+            if (confirm(resolutionText + "\n\nProceed with automatic resolution?")) {
+                resolveConflicts(conflicts);
+                showNotification('Manual conflict resolution completed!', 'success');
+            }
+        } catch (error) {
+            showNotification('Error during conflict resolution: ' + error.message, 'error');
+        }
+    }, 1000);
 }
 
 // Task 3: Show notification
@@ -401,11 +463,11 @@ document.addEventListener('DOMContentLoaded', function() {
     // Task 3: Update sync status
     updateSyncStatus();
     
-    // Task 3: Set up periodic syncing (every 30 seconds)
-    setInterval(syncQuotes, 30000);
+    // Task 3: Set up periodic syncing (every 45 seconds)
+    setInterval(syncQuotes, 45000);
     
-    // Task 3: Initial sync after 2 seconds
-    setTimeout(syncQuotes, 2000);
+    // Task 3: Initial sync after 3 seconds
+    setTimeout(syncQuotes, 3000);
     
     // Apply saved filter or show appropriate content
     if (currentFilter && currentFilter !== 'all') {
