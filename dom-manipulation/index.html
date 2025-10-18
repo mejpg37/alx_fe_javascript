@@ -108,7 +108,8 @@
     <!-- Task 3: Server Sync Section -->
     <div class="sync-section">
         <h3>Server Synchronization</h3>
-        <button onclick="syncWithServer()">Sync Now with Server</button>
+        <!-- Changed from syncWithServer() to syncQuotes() -->
+        <button onclick="syncQuotes()">Sync Now with Server</button>
         <button onclick="manualConflictResolution()" id="manualResolve">Resolve Conflicts Manually</button>
         <button onclick="toggleConflictResolution()" id="toggleConflictResolution" class="enabled">Conflict Resolution: ON</button>
         <div id="syncStatus" class="sync-status not-synced">Never synced</div>
